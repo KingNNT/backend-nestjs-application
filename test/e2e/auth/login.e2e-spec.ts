@@ -1,0 +1,136 @@
+import type { INestApplication } from '@nestjs/common';
+import type { PrismaClient } from '@prisma/client';
+import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import request from 'supertest';
+import type { App } from 'supertest/types';
+import type { StartedTestContainer } from 'testcontainers';
+import {
+  cleanDatabase,
+  disconnectPrisma,
+  setupPrismaForTests,
+} from '../../helpers/prisma-test-utils';
+import { createTestApp } from '../../helpers/test-app-factory';
+import {
+  getEventStoreConnectionString,
+  startEventStoreContainer,
+  startPostgresContainer,
+} from '../../helpers/testcontainers-setup';
+
+describe('POST /auth/login (e2e)', () => {
+  let app: INestApplication<App>;
+  let pgContainer: StartedPostgreSqlContainer;
+  let esContainer: StartedTestContainer;
+  let prisma: PrismaClient;
+
+  const testUser = {
+    email: 'logintest@example.com',
+    username: 'logintest',
+    password: 'securePass123',
+  };
+
+  beforeAll(async () => {
+    [pgContainer, esContainer] = await Promise.all([
+      startPostgresContainer(),
+      startEventStoreContainer(),
+    ]);
+
+    const dbUrl = pgContainer.getConnectionUri();
+    prisma = await setupPrismaForTests(dbUrl);
+
+    app = await createTestApp({
+      DATABASE_URL: dbUrl,
+      EVENTSTORE_CONNECTION_STRING: getEventStoreConnectionString(),
+      JWT_ACCESS_SECRET: 'test-access-secret',
+      JWT_REFRESH_SECRET: 'test-refresh-secret',
+      JWT_ACCESS_EXPIRES_IN: '15m',
+      JWT_REFRESH_EXPIRES_IN: '7d',
+    });
+  }, 120_000);
+
+  afterAll(async () => {
+    await app?.close();
+    await disconnectPrisma(prisma);
+    await Promise.all([pgContainer?.stop(), esContainer?.stop()]);
+  });
+
+  beforeEach(async () => {
+    await cleanDatabase(prisma);
+    // Register a test user before each login test
+    await request(app.getHttpServer()).post('/auth/register').send(testUser);
+  });
+
+  it('200 — login with email', async () => {
+    const res = await request(app.getHttpServer()).post('/auth/login').send({
+      identifier: testUser.email,
+      password: testUser.password,
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.accessToken).toBeDefined();
+    expect(res.body.refreshToken).toBeDefined();
+    expect(typeof res.body.accessToken).toBe('string');
+    expect(typeof res.body.refreshToken).toBe('string');
+  });
+
+  it('200 — login with username', async () => {
+    const res = await request(app.getHttpServer()).post('/auth/login').send({
+      identifier: testUser.username,
+      password: testUser.password,
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.accessToken).toBeDefined();
+    expect(res.body.refreshToken).toBeDefined();
+  });
+
+  it('returns valid JWT tokens', async () => {
+    const res = await request(app.getHttpServer()).post('/auth/login').send({
+      identifier: testUser.email,
+      password: testUser.password,
+    });
+
+    // JWT tokens have 3 parts separated by dots
+    expect(res.body.accessToken.split('.')).toHaveLength(3);
+    expect(res.body.refreshToken.split('.')).toHaveLength(3);
+  });
+
+  it('401 — wrong password', async () => {
+    const res = await request(app.getHttpServer()).post('/auth/login').send({
+      identifier: testUser.email,
+      password: 'wrongPassword',
+    });
+
+    expect(res.status).toBe(401);
+  });
+
+  it('401 — non-existent user', async () => {
+    const res = await request(app.getHttpServer()).post('/auth/login').send({
+      identifier: 'nobody@example.com',
+      password: 'somePassword',
+    });
+
+    expect(res.status).toBe(401);
+  });
+
+  it('400 — missing fields', async () => {
+    const res = await request(app.getHttpServer()).post('/auth/login').send({
+      identifier: testUser.email,
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('updates lastLoginAt timestamp', async () => {
+    await request(app.getHttpServer()).post('/auth/login').send({
+      identifier: testUser.email,
+      password: testUser.password,
+    });
+
+    // Query credentials to check lastLoginAt
+    const cred = await (prisma as any).authCredential.findFirst({
+      where: { email: testUser.email },
+    });
+    expect(cred.lastLoginAt).toBeDefined();
+    expect(cred.lastLoginAt).not.toBeNull();
+  });
+});

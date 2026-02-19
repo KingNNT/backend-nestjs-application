@@ -1,0 +1,53 @@
+name: backend-nestjs-application
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: inviduality_dev
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  eventstore:
+    image: eventstore/eventstore:lts
+    environment:
+      EVENTSTORE_CLUSTER_SIZE: 1
+      EVENTSTORE_RUN_PROJECTIONS: All
+      EVENTSTORE_START_STANDARD_PROJECTIONS: "true"
+      EVENTSTORE_INSECURE: "true"
+    volumes:
+      - es_data:/var/lib/eventstore
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:2113/health/live || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      eventstore:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/inviduality_dev
+      EVENTSTORE_CONNECTION_STRING: esdb://eventstore:2113?tls=false
+      JWT_ACCESS_SECRET: change-me-access-secret-min-32-chars-long
+      JWT_REFRESH_SECRET: change-me-refresh-secret-min-32-chars-long
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      PORT: 3000
+      NODE_ENV: production
+      LOG_LEVEL: info
+
+volumes:
+  pg_data:
+  es_data:

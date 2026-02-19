@@ -1,0 +1,25 @@
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  eventstore:
+    environment:
+      EVENTSTORE_MEM_DB: "true"
+    ports:
+      - "2113:2113"
+
+  app:
+    build:
+      target: deps
+    command: sh -c "bunx prisma generate && bunx prisma db push && bun run start:dev"
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ./src:/app/src
+      - ./prisma:/app/prisma
+      - ./nest-cli.json:/app/nest-cli.json
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./tsconfig.build.json:/app/tsconfig.build.json
+    ports:
+      - "3000:3000"
