@@ -1,4 +1,4 @@
-# Inviduality Backend
+# Backend NestJS Application
 
 Backend API built with NestJS, following Clean Architecture, DDD, CQRS, and Event Sourcing.
 
@@ -12,6 +12,22 @@ Backend API built with NestJS, following Clean Architecture, DDD, CQRS, and Even
 - **Logging**: nestjs-pino (structured JSON in prod, pino-pretty in dev)
 - **Linting**: Biome
 - **Git Hooks**: Husky + lint-staged + commitlint + gitleaks
+
+## Quick Start (New Project)
+
+Create a new project from this template with a single command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/KingNNT/backend-nestjs-application/develop/install.sh | bash
+```
+
+Or with a project name:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/KingNNT/backend-nestjs-application/develop/install.sh | bash -s my-project
+```
+
+The installer will prompt for project name, description, and author info, then set everything up automatically.
 
 ## Prerequisites
 
@@ -51,6 +67,7 @@ The API will be available at `http://localhost:3000`. Swagger docs at `http://lo
 | `bun run test` | Unit tests |
 | `bun run test:integration` | Integration tests (Docker required) |
 | `bun run test:e2e` | End-to-end tests (Docker required) |
+| `bun run test:install` | Install script tests (bats) |
 
 ## Git Hooks
 

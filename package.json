@@ -20,6 +20,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:integration": "jest --config ./test/integration/jest-integration.json --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
+    "test:install": "bats test/install/install.bats",
     "pre-commit": "concurrently \"./bin/gitleaks.sh protect --staged\" \"lint-staged\"",
     "prepare": "husky"
   },
@@ -60,6 +61,7 @@
     "@types/node": "^22.10.7",
     "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^6.0.2",
+    "bats": "^1.13.0",
     "concurrently": "^9.2.1",
     "husky": "^9.1.7",
     "jest": "^30.0.0",
