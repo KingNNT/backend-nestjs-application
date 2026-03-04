@@ -29,14 +29,14 @@ bunx prisma generate         # Regenerate Prisma client after schema changes
 bunx prisma db push          # Push schema to local DB (dev only)
 
 # Infrastructure
-docker compose up -d         # Start PostgreSQL + EventStoreDB (dev ports exposed via override)
+docker compose up -d         # Start PostgreSQL (dev ports exposed via override)
 ```
 
 ## Architecture
 
 Clean Architecture + DDD + CQRS + Event Sourcing on NestJS v11 / TypeScript 5.7 (`nodenext` module resolution, CJS output).
 
-**Data stores**: PostgreSQL via Prisma 6 (read model projections) and EventStoreDB (event store / source of truth).
+**Data stores**: PostgreSQL via Prisma 6 (read model projections and `domain_events` table as the event store / source of truth).
 
 ### Bounded Contexts
 
@@ -58,14 +58,14 @@ Shared base classes live in `src/shared/` (AggregateRootBase, DomainEventBase, V
 
 ### Key Flows
 
-**Register**: `Auth.RegisterHandler` → hash password → `CommandBus.execute(CreateUserCommand)` → `User.CreateUserHandler` → `UserUnitOfWork.commit()` (EventStoreDB → version update → read model projection → clear → publish to EventBus) → return userId → Auth stores credentials in `auth_credentials` table.
+**Register**: `Auth.RegisterHandler` → hash password → `CommandBus.execute(CreateUserCommand)` → `User.CreateUserHandler` → `UserUnitOfWork.commit()` (`domain_events` table → version update → read model projection → clear → publish to EventBus) → return userId → Auth stores credentials in `auth_credentials` table.
 
-**Login**: `Auth.LoginHandler` → lookup `auth_credentials` → verify password → generate JWT pair. No EventStoreDB interaction.
+**Login**: `Auth.LoginHandler` → lookup `auth_credentials` → verify password → generate JWT pair. No event store interaction.
 
 ### Unit of Work Commit Sequence
 
 `UserUnitOfWork.commit()` performs these steps in order:
-1. Append events to EventStoreDB (source of truth)
+1. Append events to `domain_events` table (source of truth)
 2. Update aggregate version
 3. Update read model projection (best-effort — failure is logged, not thrown)
 4. Clear uncommitted events
@@ -82,7 +82,7 @@ export const USER_REPOSITORY_TOKEN = Symbol('IUserRepository');
 
 ### Important Design Decisions
 
-- Password hashes are stored in Auth's `auth_credentials` Prisma table, never in EventStoreDB events (GDPR).
+- Password hashes are stored in Auth's `auth_credentials` Prisma table, never in domain events (GDPR).
 - `EventStoreService.appendToStream()` takes `serializer` as a parameter (not injected) to support multiple bounded contexts with different event types.
 - `EventSerializer.deserialize()` returns `null` for unknown event types (forward compatibility).
 - `DomainEventBase` constructor accepts optional `eventId`/`occurredAt` for correct deserialization from stored events.
@@ -92,8 +92,9 @@ export const USER_REPOSITORY_TOKEN = Symbol('IUserRepository');
 
 ### Prisma Models
 
-Two tables in one schema, owned by different contexts:
-- `users` — User read model (no password). Projected from EventStoreDB.
+Three tables in one schema, owned by different contexts:
+- `domain_events` — Append-only event store (source of truth). Shared infrastructure.
+- `users` — User read model (no password). Projected from domain events.
 - `auth_credentials` — Auth context. Password hash, login tracking.
 
 ### Git Hooks (Husky)
@@ -107,5 +108,5 @@ Commit messages are validated by **commitlint** (conventional commits: `feat:`, 
 ### Testing
 
 - **Unit tests** (`*.spec.ts` in `src/`): Pure logic, mocks in `test/helpers/mocks/`, factories in `test/helpers/factories/`.
-- **Integration tests** (`test/integration/*.integration.spec.ts`): Use Testcontainers for real PostgreSQL and EventStoreDB. 60s timeout.
+- **Integration tests** (`test/integration/*.integration.spec.ts`): Use Testcontainers for real PostgreSQL. 60s timeout.
 - **E2E tests** (`test/e2e/*.e2e-spec.ts`): Full app via `test/helpers/test-app-factory.ts` with Testcontainers. 120s timeout.

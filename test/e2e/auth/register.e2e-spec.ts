@@ -3,37 +3,27 @@ import type { PrismaClient } from '@prisma/client';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import request from 'supertest';
 import type { App } from 'supertest/types';
-import type { StartedTestContainer } from 'testcontainers';
 import {
   cleanDatabase,
   disconnectPrisma,
   setupPrismaForTests,
 } from '../../helpers/prisma-test-utils';
 import { createTestApp } from '../../helpers/test-app-factory';
-import {
-  getEventStoreConnectionString,
-  startEventStoreContainer,
-  startPostgresContainer,
-} from '../../helpers/testcontainers-setup';
+import { startPostgresContainer } from '../../helpers/testcontainers-setup';
 
 describe('POST /auth/register (e2e)', () => {
   let app: INestApplication<App>;
   let pgContainer: StartedPostgreSqlContainer;
-  let esContainer: StartedTestContainer;
   let prisma: PrismaClient;
 
   beforeAll(async () => {
-    [pgContainer, esContainer] = await Promise.all([
-      startPostgresContainer(),
-      startEventStoreContainer(),
-    ]);
+    pgContainer = await startPostgresContainer();
 
     const dbUrl = pgContainer.getConnectionUri();
     prisma = await setupPrismaForTests(dbUrl);
 
     app = await createTestApp({
       DATABASE_URL: dbUrl,
-      EVENTSTORE_CONNECTION_STRING: getEventStoreConnectionString(),
       JWT_ACCESS_SECRET: 'test-access-secret',
       JWT_REFRESH_SECRET: 'test-refresh-secret',
       JWT_ACCESS_EXPIRES_IN: '15m',
@@ -44,7 +34,7 @@ describe('POST /auth/register (e2e)', () => {
   afterAll(async () => {
     await app?.close();
     await disconnectPrisma(prisma);
-    await Promise.all([pgContainer?.stop(), esContainer?.stop()]);
+    await pgContainer?.stop();
   });
 
   beforeEach(async () => {

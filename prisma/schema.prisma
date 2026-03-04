@@ -42,3 +42,18 @@ model AuthCredential {
 
   @@map("auth_credentials")
 }
+
+// Event store — append-only log of domain events.
+// Replaces EventStoreDB with a PostgreSQL-backed event store.
+model DomainEvent {
+  id         String   @id @db.Uuid
+  streamId   String   @map("stream_id") @db.VarChar(255)
+  eventType  String   @map("event_type") @db.VarChar(100)
+  payload    Json
+  version    BigInt
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz(6)
+
+  @@unique([streamId, version])
+  @@index([streamId])
+  @@map("domain_events")
+}

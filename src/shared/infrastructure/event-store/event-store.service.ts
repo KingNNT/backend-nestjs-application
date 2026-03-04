@@ -1,19 +1,6 @@
-import {
-  EventStoreDBClient,
-  FORWARDS,
-  type JSONEventData,
-  jsonEvent,
-  START,
-  StreamNotFoundError,
-} from '@eventstore/db-client';
-import {
-  Injectable,
-  Logger,
-  type OnModuleDestroy,
-  type OnModuleInit,
-} from '@nestjs/common';
-import type { ConfigService } from '@nestjs/config';
+import { Injectable } from '@nestjs/common';
 import type { DomainEventBase } from '../../domain/domain-event.base';
+import type { PrismaService } from '../prisma/prisma.service';
 
 export interface StoredEventData {
   eventType: string;
@@ -31,24 +18,24 @@ export interface AppendResult {
   nextExpectedRevision: bigint;
 }
 
-@Injectable()
-export class EventStoreService implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(EventStoreService.name);
-  private client!: EventStoreDBClient;
-
-  constructor(private readonly config: ConfigService) {}
-
-  onModuleInit(): void {
-    const connectionString = this.config.getOrThrow<string>(
-      'EVENTSTORE_CONNECTION_STRING',
+export class ConcurrencyError extends Error {
+  constructor(
+    streamId: string,
+    expectedRevision: bigint | 'no_stream' | 'any',
+    actualRevision: bigint | null,
+  ) {
+    super(
+      `Concurrency conflict on stream "${streamId}": expected revision ${String(expectedRevision)}, actual ${actualRevision === null ? 'no_stream' : String(actualRevision)}`,
     );
-    this.client = EventStoreDBClient.connectionString(connectionString);
-    this.logger.log('EventStoreDB client initialized');
+    this.name = 'ConcurrencyError';
   }
+}
 
-  async onModuleDestroy(): Promise<void> {
-    await this.client.dispose();
-  }
+@Injectable()
+export class EventStoreService {
+  private readonly logger = new Logger(EventStoreService.name);
+
+  constructor(private readonly prisma: PrismaService) {}
 
   async appendToStream(
     streamId: string,
@@ -56,55 +43,79 @@ export class EventStoreService implements OnModuleInit, OnModuleDestroy {
     expectedRevision: bigint | 'no_stream' | 'any',
     serializer: EventSerializer,
   ): Promise<AppendResult> {
-    const jsonEvents: JSONEventData[] = events.map((e) => {
-      const stored = serializer.serialize(e);
-      return jsonEvent({
-        id: stored.eventId,
-        type: stored.eventType,
-        data: stored.payload,
-        metadata: { occurredAt: stored.occurredAt },
+    return this.prisma.$transaction(async (tx) => {
+      // Get the current max version for this stream
+      const latest = await tx.domainEvent.findFirst({
+        where: { streamId },
+        orderBy: { version: 'desc' },
+        select: { version: true },
       });
-    });
 
-    const result = await this.client.appendToStream(streamId, jsonEvents, {
-      expectedRevision,
-    });
+      const currentRevision = latest?.version ?? null;
 
-    return { nextExpectedRevision: result.nextExpectedRevision };
+      // Validate expected revision
+      if (expectedRevision === 'no_stream') {
+        if (currentRevision !== null) {
+          throw new ConcurrencyError(
+            streamId,
+            expectedRevision,
+            currentRevision,
+          );
+        }
+      } else if (expectedRevision !== 'any') {
+        if (currentRevision === null || currentRevision !== expectedRevision) {
+          throw new ConcurrencyError(
+            streamId,
+            expectedRevision,
+            currentRevision,
+          );
+        }
+      }
+
+      const startVersion = currentRevision !== null ? currentRevision + 1n : 0n;
+
+      const rows = events.map((event, index) => {
+        const stored = serializer.serialize(event);
+        return {
+          id: stored.eventId,
+          streamId,
+          eventType: stored.eventType,
+          payload: stored.payload as object,
+          version: startVersion + BigInt(index),
+          occurredAt: new Date(stored.occurredAt),
+        };
+      });
+
+      await tx.domainEvent.createMany({ data: rows });
+
+      const nextExpectedRevision = startVersion + BigInt(events.length) - 1n;
+      return { nextExpectedRevision };
+    });
   }
 
   async readStream(
     streamId: string,
     serializer: EventSerializer,
   ): Promise<DomainEventBase[]> {
-    try {
-      const events: DomainEventBase[] = [];
-      const readable = this.client.readStream(streamId, {
-        direction: FORWARDS,
-        fromRevision: START,
-        maxCount: 10_000,
+    const rows = await this.prisma.domainEvent.findMany({
+      where: { streamId },
+      orderBy: { version: 'asc' },
+    });
+
+    const events: DomainEventBase[] = [];
+    for (const row of rows) {
+      const domainEvent = serializer.deserialize({
+        eventType: row.eventType,
+        eventId: row.id,
+        occurredAt: row.occurredAt.toISOString(),
+        payload: row.payload as Record<string, unknown>,
       });
-
-      for await (const resolvedEvent of readable) {
-        if (!resolvedEvent.event) continue;
-        const domainEvent = serializer.deserialize({
-          eventType: resolvedEvent.event.type,
-          eventId: resolvedEvent.event.id,
-          occurredAt:
-            (resolvedEvent.event.metadata as any)?.occurredAt ??
-            new Date().toISOString(),
-          payload: resolvedEvent.event.data as Record<string, unknown>,
-        });
-        // Skip unknown event types (forward compatibility)
-        if (domainEvent) {
-          events.push(domainEvent);
-        }
+      // Skip unknown event types (forward compatibility)
+      if (domainEvent) {
+        events.push(domainEvent);
       }
-
-      return events;
-    } catch (err) {
-      if (err instanceof StreamNotFoundError) return [];
-      throw err;
     }
+
+    return events;
   }
 }

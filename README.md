@@ -107,7 +107,6 @@ src/
 See [`.env.example`](.env.example) for all required variables:
 
 - `DATABASE_URL` — PostgreSQL connection string
-- `EVENTSTORE_CONNECTION_STRING` — EventStoreDB connection string
 - `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` — JWT signing secrets
 - `JWT_ACCESS_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` — Token expiration
 - `PORT` — Server port (default: 3000)

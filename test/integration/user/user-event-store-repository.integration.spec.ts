@@ -1,38 +1,41 @@
 import { randomUUID } from 'node:crypto';
-import type { StartedTestContainer } from 'testcontainers';
+import type { PrismaClient } from '@prisma/client';
+import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { UserAggregate } from '../../../src/modules/user/domain/aggregates/user.aggregate';
 import { UserId } from '../../../src/modules/user/domain/value-objects/user-id.vo';
 import { UserEventSerializer } from '../../../src/modules/user/infrastructure/persistence/event-store/event-serializer';
 import { UserEventStoreRepository } from '../../../src/modules/user/infrastructure/persistence/event-store/user-event-store.repository';
 import { EventStoreService } from '../../../src/shared/infrastructure/event-store/event-store.service';
 import {
-  getEventStoreConnectionString,
-  startEventStoreContainer,
-} from '../../helpers/testcontainers-setup';
+  cleanDatabase,
+  disconnectPrisma,
+  setupPrismaForTests,
+} from '../../helpers/prisma-test-utils';
+import { startPostgresContainer } from '../../helpers/testcontainers-setup';
 
 describe('UserEventStoreRepository (integration)', () => {
-  let container: StartedTestContainer;
+  let pgContainer: StartedPostgreSqlContainer;
+  let prisma: PrismaClient;
   let eventStoreService: EventStoreService;
   let serializer: UserEventSerializer;
   let repository: UserEventStoreRepository;
 
   beforeAll(async () => {
-    container = await startEventStoreContainer();
+    pgContainer = await startPostgresContainer();
+    prisma = await setupPrismaForTests(pgContainer.getConnectionUri());
 
-    const connectionString = getEventStoreConnectionString();
-    // Manually construct EventStoreService with config mock
-    eventStoreService = new EventStoreService({
-      getOrThrow: () => connectionString,
-    } as any);
-    eventStoreService.onModuleInit();
-
+    eventStoreService = new EventStoreService(prisma as any);
     serializer = new UserEventSerializer();
     repository = new UserEventStoreRepository(eventStoreService, serializer);
   }, 60_000);
 
   afterAll(async () => {
-    await eventStoreService.onModuleDestroy();
-    await container.stop();
+    await disconnectPrisma(prisma);
+    await pgContainer.stop();
+  });
+
+  beforeEach(async () => {
+    await cleanDatabase(prisma);
   });
 
   it('findById() returns null for non-existent stream', async () => {

@@ -3,12 +3,6 @@ services:
     ports:
       - "5432:5432"
 
-  eventstore:
-    environment:
-      EVENTSTORE_MEM_DB: "true"
-    ports:
-      - "2113:2113"
-
   app:
     build:
       target: deps

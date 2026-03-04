@@ -1,9 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import type { StartedTestContainer } from 'testcontainers';
 import { UserAggregate } from '../../../src/modules/user/domain/aggregates/user.aggregate';
-import { UserId } from '../../../src/modules/user/domain/value-objects/user-id.vo';
 import { UserEventSerializer } from '../../../src/modules/user/infrastructure/persistence/event-store/event-serializer';
 import { UserReadModelRepository } from '../../../src/modules/user/infrastructure/persistence/read-model/user-read-model.repository';
 import { UserUnitOfWork } from '../../../src/modules/user/infrastructure/unit-of-work/user-unit-of-work';
@@ -13,15 +11,10 @@ import {
   disconnectPrisma,
   setupPrismaForTests,
 } from '../../helpers/prisma-test-utils';
-import {
-  getEventStoreConnectionString,
-  startEventStoreContainer,
-  startPostgresContainer,
-} from '../../helpers/testcontainers-setup';
+import { startPostgresContainer } from '../../helpers/testcontainers-setup';
 
 describe('UserUnitOfWork (integration)', () => {
   let pgContainer: StartedPostgreSqlContainer;
-  let esContainer: StartedTestContainer;
   let prisma: PrismaClient;
   let eventStoreService: EventStoreService;
   let serializer: UserEventSerializer;
@@ -32,19 +25,10 @@ describe('UserUnitOfWork (integration)', () => {
   const mockEventBus = { publish: jest.fn() };
 
   beforeAll(async () => {
-    [pgContainer, esContainer] = await Promise.all([
-      startPostgresContainer(),
-      startEventStoreContainer(),
-    ]);
-
+    pgContainer = await startPostgresContainer();
     prisma = await setupPrismaForTests(pgContainer.getConnectionUri());
 
-    const connectionString = getEventStoreConnectionString();
-    eventStoreService = new EventStoreService({
-      getOrThrow: () => connectionString,
-    } as any);
-    eventStoreService.onModuleInit();
-
+    eventStoreService = new EventStoreService(prisma as any);
     serializer = new UserEventSerializer();
     readModelRepo = new UserReadModelRepository(prisma as any);
     unitOfWork = new UserUnitOfWork(
@@ -56,9 +40,8 @@ describe('UserUnitOfWork (integration)', () => {
   }, 120_000);
 
   afterAll(async () => {
-    await eventStoreService.onModuleDestroy();
     await disconnectPrisma(prisma);
-    await Promise.all([pgContainer.stop(), esContainer.stop()]);
+    await pgContainer.stop();
   });
 
   beforeEach(async () => {
@@ -66,7 +49,7 @@ describe('UserUnitOfWork (integration)', () => {
     mockEventBus.publish.mockClear();
   });
 
-  it('commit() writes to EventStoreDB and updates version', async () => {
+  it('commit() writes to event store and updates version', async () => {
     const user = UserAggregate.create({
       email: `uow-${randomUUID().slice(0, 8)}@example.com`,
       username: `uow${randomUUID().slice(0, 8)}`,
@@ -86,14 +69,14 @@ describe('UserUnitOfWork (integration)', () => {
     expect(mockEventBus.publish).toHaveBeenCalled();
   });
 
-  it('commit() writes events that can be read back from EventStoreDB', async () => {
+  it('commit() writes events that can be read back from event store', async () => {
     const email = `uow2-${randomUUID().slice(0, 8)}@example.com`;
     const username = `uow2${randomUUID().slice(0, 6)}`;
     const user = UserAggregate.create({ email, username });
 
     await unitOfWork.commit(user);
 
-    // Read from EventStoreDB
+    // Read from event store
     const streamId = `user-${user.aggregateId}`;
     const events = await eventStoreService.readStream(streamId, serializer);
     expect(events).toHaveLength(1);

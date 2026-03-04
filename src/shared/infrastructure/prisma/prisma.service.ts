@@ -8,6 +8,8 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import type { ClsService } from 'nestjs-cls';
 import { CLS_USER_ID } from '../cls/cls.constants';
 
+const AUDITABLE_MODELS = new Set(['User', 'AuthCredential']);
+
 function createExtendedClient(cls: ClsService) {
   const baseClient = new PrismaClient();
 
@@ -15,6 +17,7 @@ function createExtendedClient(cls: ClsService) {
     query: {
       $allModels: {
         async create({ args, query, model }) {
+          if (!AUDITABLE_MODELS.has(model)) return query(args);
           const userId = cls.isActive() ? cls.get(CLS_USER_ID) : undefined;
           args.data = {
             ...args.data,
@@ -24,7 +27,8 @@ function createExtendedClient(cls: ClsService) {
           return query(args);
         },
 
-        async createMany({ args, query }) {
+        async createMany({ args, query, model }) {
+          if (!AUDITABLE_MODELS.has(model)) return query(args);
           const userId = cls.isActive() ? cls.get(CLS_USER_ID) : undefined;
           const records = Array.isArray(args.data) ? args.data : [args.data];
           args.data = records.map((record: Record<string, unknown>) => ({
@@ -35,7 +39,8 @@ function createExtendedClient(cls: ClsService) {
           return query(args);
         },
 
-        async createManyAndReturn({ args, query }) {
+        async createManyAndReturn({ args, query, model }) {
+          if (!AUDITABLE_MODELS.has(model)) return query(args);
           const userId = cls.isActive() ? cls.get(CLS_USER_ID) : undefined;
           const records = Array.isArray(args.data) ? args.data : [args.data];
           args.data = records.map((record: Record<string, unknown>) => ({
@@ -46,7 +51,8 @@ function createExtendedClient(cls: ClsService) {
           return query(args);
         },
 
-        async update({ args, query }) {
+        async update({ args, query, model }) {
+          if (!AUDITABLE_MODELS.has(model)) return query(args);
           const userId = cls.isActive() ? cls.get(CLS_USER_ID) : undefined;
           args.data = {
             ...args.data,
@@ -55,7 +61,8 @@ function createExtendedClient(cls: ClsService) {
           return query(args);
         },
 
-        async updateMany({ args, query }) {
+        async updateMany({ args, query, model }) {
+          if (!AUDITABLE_MODELS.has(model)) return query(args);
           const userId = cls.isActive() ? cls.get(CLS_USER_ID) : undefined;
           args.data = {
             ...args.data,
@@ -64,7 +71,8 @@ function createExtendedClient(cls: ClsService) {
           return query(args);
         },
 
-        async upsert({ args, query }) {
+        async upsert({ args, query, model }) {
+          if (!AUDITABLE_MODELS.has(model)) return query(args);
           const userId = cls.isActive() ? cls.get(CLS_USER_ID) : undefined;
           args.create = {
             ...args.create,
@@ -79,6 +87,12 @@ function createExtendedClient(cls: ClsService) {
         },
 
         async delete({ args, model }) {
+          if (!AUDITABLE_MODELS.has(model)) {
+            const delegate = Reflect.get(baseClient, lowerFirst(model)) as {
+              delete: (args: unknown) => Promise<unknown>;
+            };
+            return delegate.delete({ where: args.where });
+          }
           const userId = cls.isActive() ? cls.get(CLS_USER_ID) : undefined;
           const now = new Date();
           const delegate = Reflect.get(baseClient, lowerFirst(model)) as {
@@ -95,6 +109,12 @@ function createExtendedClient(cls: ClsService) {
         },
 
         async deleteMany({ args, model }) {
+          if (!AUDITABLE_MODELS.has(model)) {
+            const delegate = Reflect.get(baseClient, lowerFirst(model)) as {
+              deleteMany: (args: unknown) => Promise<unknown>;
+            };
+            return delegate.deleteMany({ where: args.where });
+          }
           const userId = cls.isActive() ? cls.get(CLS_USER_ID) : undefined;
           const now = new Date();
           const delegate = Reflect.get(baseClient, lowerFirst(model)) as {
@@ -110,17 +130,20 @@ function createExtendedClient(cls: ClsService) {
           });
         },
 
-        async findFirst({ args, query }) {
+        async findFirst({ args, query, model }) {
+          if (!AUDITABLE_MODELS.has(model)) return query(args);
           args.where = { ...args.where, deletedAt: null };
           return query(args);
         },
 
-        async findMany({ args, query }) {
+        async findMany({ args, query, model }) {
+          if (!AUDITABLE_MODELS.has(model)) return query(args);
           args.where = { ...args.where, deletedAt: null };
           return query(args);
         },
 
-        async findUnique({ args, query }) {
+        async findUnique({ args, query, model }) {
+          if (!AUDITABLE_MODELS.has(model)) return query(args);
           const result = await query(args);
           if (result && (result as Record<string, unknown>).deletedAt != null) {
             return null;
@@ -129,6 +152,7 @@ function createExtendedClient(cls: ClsService) {
         },
 
         async findUniqueOrThrow({ args, query, model }) {
+          if (!AUDITABLE_MODELS.has(model)) return query(args);
           const result = await query(args);
           if (result && (result as Record<string, unknown>).deletedAt != null) {
             throw new Prisma.PrismaClientKnownRequestError(
@@ -139,17 +163,20 @@ function createExtendedClient(cls: ClsService) {
           return result;
         },
 
-        async count({ args, query }) {
+        async count({ args, query, model }) {
+          if (!AUDITABLE_MODELS.has(model)) return query(args);
           args.where = { ...args.where, deletedAt: null };
           return query(args);
         },
 
-        async aggregate({ args, query }) {
+        async aggregate({ args, query, model }) {
+          if (!AUDITABLE_MODELS.has(model)) return query(args);
           args.where = { ...args.where, deletedAt: null };
           return query(args);
         },
 
-        async groupBy({ args, query }) {
+        async groupBy({ args, query, model }) {
+          if (!AUDITABLE_MODELS.has(model)) return query(args);
           args.where = { ...args.where, deletedAt: null };
           return query(args);
         },
@@ -188,6 +215,10 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
 
   get authCredential() {
     return this._client.authCredential;
+  }
+
+  get domainEvent() {
+    return this._client.domainEvent;
   }
 
   get $transaction() {

@@ -27,7 +27,11 @@ export async function setupPrismaForTests(
 
 export async function cleanDatabase(client?: PrismaClient): Promise<void> {
   const p = client ?? prisma;
-  await p.$transaction([p.authCredential.deleteMany(), p.user.deleteMany()]);
+  await p.$transaction([
+    p.domainEvent.deleteMany(),
+    p.authCredential.deleteMany(),
+    p.user.deleteMany(),
+  ]);
 }
 
 export async function disconnectPrisma(client?: PrismaClient): Promise<void> {
