@@ -6,8 +6,7 @@ Backend API built with NestJS, following Clean Architecture, DDD, CQRS, and Even
 
 - **Runtime**: Node.js with [Bun](https://bun.sh/) as package manager
 - **Framework**: NestJS v11 / TypeScript 5.7
-- **Event Store**: EventStoreDB (source of truth)
-- **Read Model**: PostgreSQL via Prisma 6
+- **Data Store**: PostgreSQL via Prisma 6 (read model projections and `domain_events` table as event store / source of truth)
 - **Auth**: JWT (access + refresh tokens), bcrypt
 - **Logging**: nestjs-pino (structured JSON in prod, pino-pretty in dev)
 - **Linting**: Biome
@@ -32,7 +31,7 @@ The installer will prompt for project name, description, and author info, then s
 ## Prerequisites
 
 - [Bun](https://bun.sh/) installed
-- [Docker](https://www.docker.com/) and Docker Compose (for PostgreSQL and EventStoreDB)
+- [Docker](https://www.docker.com/) and Docker Compose (for PostgreSQL)
 
 ## Getting Started
 
@@ -43,7 +42,7 @@ bun install
 # Copy environment variables
 cp .env.example .env
 
-# Start infrastructure (PostgreSQL + EventStoreDB)
+# Start infrastructure (PostgreSQL)
 docker compose up -d
 
 # Generate Prisma client and push schema
@@ -81,7 +80,7 @@ Git hooks are set up automatically via Husky on `bun install`. On every commit:
 
 The application follows Clean Architecture with two bounded contexts:
 
-- **User** — Identity aggregate with full event sourcing. Events are persisted to EventStoreDB and projected to a PostgreSQL read model.
+- **User** — Identity aggregate with full event sourcing. Events are persisted to the PostgreSQL `domain_events` table and projected to a read model.
 - **Auth** — Handles registration, login, password hashing, and JWT token management. Credentials are stored in PostgreSQL (not in the event store, for GDPR compliance).
 
 Cross-context communication uses NestJS CQRS CommandBus (synchronous) and integration events (asynchronous).
@@ -93,8 +92,7 @@ src/
 │   ├── user/        # User bounded context
 │   │   ├── domain/          # Aggregate, value objects, events
 │   │   ├── application/     # Command handlers, port interfaces
-│   │   ├── infrastructure/  # EventStoreDB repo, Prisma read model, UoW
-│   │   └── presentation/    # (future controllers)
+│   │   └── infrastructure/  # Event store repo, Prisma read model, UoW
 │   └── auth/        # Auth bounded context
 │       ├── domain/          # Domain errors
 │       ├── application/     # Register/Login handlers, port interfaces
