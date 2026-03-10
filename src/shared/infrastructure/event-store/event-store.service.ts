@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { DomainEventBase } from '../../domain/domain-event.base';
 import type { PrismaService } from '../prisma/prisma.service';
 

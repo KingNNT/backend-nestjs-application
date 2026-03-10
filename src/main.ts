@@ -1,5 +1,5 @@
-import { ValidationPipe } from '@nestjs/common';
-import { NestFactory } from '@nestjs/core';
+import { ClassSerializerInterceptor, ValidationPipe } from '@nestjs/common';
+import { NestFactory, Reflector } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ClsService } from 'nestjs-cls';
 import { Logger } from 'nestjs-pino';
@@ -11,7 +11,10 @@ async function bootstrap(): Promise<void> {
   app.useLogger(app.get(Logger));
 
   const cls = app.get(ClsService);
-  app.useGlobalInterceptors(new ClsUserInterceptor(cls));
+  app.useGlobalInterceptors(
+    new ClsUserInterceptor(cls),
+    new ClassSerializerInterceptor(app.get(Reflector)),
+  );
 
   app.useGlobalPipes(
     new ValidationPipe({

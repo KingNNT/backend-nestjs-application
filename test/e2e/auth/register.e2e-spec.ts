@@ -49,8 +49,8 @@ describe('POST /auth/register (e2e)', () => {
     });
 
     expect(res.status).toBe(201);
-    expect(res.body.userId).toBeDefined();
-    expect(typeof res.body.userId).toBe('string');
+    expect(res.body.user_id).toBeDefined();
+    expect(typeof res.body.user_id).toBe('string');
   });
 
   it('user is stored in users table', async () => {
@@ -61,7 +61,7 @@ describe('POST /auth/register (e2e)', () => {
     });
 
     const user = await (prisma as any).user.findUnique({
-      where: { id: res.body.userId },
+      where: { id: res.body.user_id },
     });
     expect(user).toBeDefined();
     expect(user.email).toBe('dbcheck@example.com');
@@ -75,7 +75,7 @@ describe('POST /auth/register (e2e)', () => {
     });
 
     const cred = await (prisma as any).authCredential.findUnique({
-      where: { userId: res.body.userId },
+      where: { userId: res.body.user_id },
     });
     expect(cred).toBeDefined();
     expect(cred.email).toBe('credcheck@example.com');

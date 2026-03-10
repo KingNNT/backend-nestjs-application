@@ -56,10 +56,10 @@ describe('POST /auth/login (e2e)', () => {
     });
 
     expect(res.status).toBe(200);
-    expect(res.body.accessToken).toBeDefined();
-    expect(res.body.refreshToken).toBeDefined();
-    expect(typeof res.body.accessToken).toBe('string');
-    expect(typeof res.body.refreshToken).toBe('string');
+    expect(res.body.access_token).toBeDefined();
+    expect(res.body.refresh_token).toBeDefined();
+    expect(typeof res.body.access_token).toBe('string');
+    expect(typeof res.body.refresh_token).toBe('string');
   });
 
   it('200 — login with username', async () => {
@@ -69,8 +69,8 @@ describe('POST /auth/login (e2e)', () => {
     });
 
     expect(res.status).toBe(200);
-    expect(res.body.accessToken).toBeDefined();
-    expect(res.body.refreshToken).toBeDefined();
+    expect(res.body.access_token).toBeDefined();
+    expect(res.body.refresh_token).toBeDefined();
   });
 
   it('returns valid JWT tokens', async () => {
@@ -80,8 +80,8 @@ describe('POST /auth/login (e2e)', () => {
     });
 
     // JWT tokens have 3 parts separated by dots
-    expect(res.body.accessToken.split('.')).toHaveLength(3);
-    expect(res.body.refreshToken.split('.')).toHaveLength(3);
+    expect(res.body.access_token.split('.')).toHaveLength(3);
+    expect(res.body.refresh_token.split('.')).toHaveLength(3);
   });
 
   it('401 — wrong password', async () => {

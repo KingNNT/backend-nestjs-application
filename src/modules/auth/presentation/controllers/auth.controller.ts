@@ -26,7 +26,9 @@ export class AuthController {
       RegisterCommand,
       RegisterResult
     >(new RegisterCommand(dto.email, dto.username, dto.password));
-    return { userId: result.userId };
+    const response = new RegisterResponseDto();
+    response.userId = result.userId;
+    return response;
   }
 
   @Post('login')
@@ -38,9 +40,9 @@ export class AuthController {
     const result = await this.commandBus.execute<LoginCommand, LoginResult>(
       new LoginCommand(dto.identifier, dto.password),
     );
-    return {
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-    };
+    const response = new LoginResponseDto();
+    response.accessToken = result.accessToken;
+    response.refreshToken = result.refreshToken;
+    return response;
   }
 }

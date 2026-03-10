@@ -1,6 +1,8 @@
 import { createMockCommandBus } from '../../../../../test/helpers/mocks/command-bus.mock';
 import { LoginCommand } from '../../application/commands/login/login.command';
 import { RegisterCommand } from '../../application/commands/register/register.command';
+import { LoginResponseDto } from '../dtos/login.response.dto';
+import { RegisterResponseDto } from '../dtos/register.response.dto';
 import { AuthController } from './auth.controller';
 
 describe('AuthController', () => {
@@ -30,7 +32,8 @@ describe('AuthController', () => {
       expect(dispatched.email).toBe('test@example.com');
       expect(dispatched.username).toBe('testuser');
       expect(dispatched.password).toBe('securePassword123');
-      expect(result).toEqual({ userId: 'new-user-id' });
+      expect(result).toBeInstanceOf(RegisterResponseDto);
+      expect(result.userId).toBe('new-user-id');
     });
   });
 
@@ -51,10 +54,9 @@ describe('AuthController', () => {
       expect(dispatched).toBeInstanceOf(LoginCommand);
       expect(dispatched.identifier).toBe('test@example.com');
       expect(dispatched.password).toBe('securePassword123');
-      expect(result).toEqual({
-        accessToken: 'access-token',
-        refreshToken: 'refresh-token',
-      });
+      expect(result).toBeInstanceOf(LoginResponseDto);
+      expect(result.accessToken).toBe('access-token');
+      expect(result.refreshToken).toBe('refresh-token');
     });
   });
 });

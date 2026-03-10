@@ -1,4 +1,9 @@
-import { type INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  ClassSerializerInterceptor,
+  type INestApplication,
+  ValidationPipe,
+} from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { PrismaClient } from '@prisma/client';
 import { AppModule } from '../../src/app.module';
@@ -28,6 +33,8 @@ export async function createTestApp(
     .compile();
 
   const app = moduleRef.createNestApplication();
+
+  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
 
   app.useGlobalPipes(
     new ValidationPipe({

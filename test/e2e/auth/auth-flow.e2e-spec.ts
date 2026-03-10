@@ -52,7 +52,7 @@ describe('Auth flow (e2e)', () => {
       });
 
     expect(registerRes.status).toBe(201);
-    expect(registerRes.body.userId).toBeDefined();
+    expect(registerRes.body.user_id).toBeDefined();
 
     // Login with email
     const loginRes = await request(app.getHttpServer())
@@ -63,8 +63,8 @@ describe('Auth flow (e2e)', () => {
       });
 
     expect(loginRes.status).toBe(200);
-    expect(loginRes.body.accessToken).toBeDefined();
-    expect(loginRes.body.refreshToken).toBeDefined();
+    expect(loginRes.body.access_token).toBeDefined();
+    expect(loginRes.body.refresh_token).toBeDefined();
   });
 
   it('register then login with username', async () => {
@@ -84,7 +84,7 @@ describe('Auth flow (e2e)', () => {
       });
 
     expect(loginRes.status).toBe(200);
-    expect(loginRes.body.accessToken).toBeDefined();
+    expect(loginRes.body.access_token).toBeDefined();
   });
 
   it('register then login with email then login with username', async () => {
@@ -113,7 +113,7 @@ describe('Auth flow (e2e)', () => {
     expect(loginUsername.status).toBe(200);
 
     // Both should return valid tokens
-    expect(loginEmail.body.accessToken).toBeDefined();
-    expect(loginUsername.body.accessToken).toBeDefined();
+    expect(loginEmail.body.access_token).toBeDefined();
+    expect(loginUsername.body.access_token).toBeDefined();
   });
 });
