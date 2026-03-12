@@ -1,21 +1,23 @@
 import { randomUUID } from 'node:crypto';
-import type { PrismaClient } from '@prisma/client';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { UserAggregate } from '../../../src/modules/user/domain/aggregates/user.aggregate';
 import { UserEventSerializer } from '../../../src/modules/user/infrastructure/persistence/event-store/event-serializer';
 import { UserReadModelRepository } from '../../../src/modules/user/infrastructure/persistence/read-model/user-read-model.repository';
 import { UserUnitOfWork } from '../../../src/modules/user/infrastructure/unit-of-work/user-unit-of-work';
+import { AuditableTableService } from '../../../src/shared/infrastructure/database/auditable-table.service';
+import type { DrizzleService } from '../../../src/shared/infrastructure/database/drizzle.service';
 import { EventStoreService } from '../../../src/shared/infrastructure/event-store/event-store.service';
 import {
   cleanDatabase,
-  disconnectPrisma,
-  setupPrismaForTests,
-} from '../../helpers/prisma-test-utils';
+  disconnectDrizzle,
+  setupDrizzleForTests,
+  type TestDrizzleDb,
+} from '../../helpers/drizzle-test-utils';
 import { startPostgresContainer } from '../../helpers/testcontainers-setup';
 
 describe('UserUnitOfWork (integration)', () => {
   let pgContainer: StartedPostgreSqlContainer;
-  let prisma: PrismaClient;
+  let db: TestDrizzleDb;
   let eventStoreService: EventStoreService;
   let serializer: UserEventSerializer;
   let readModelRepo: UserReadModelRepository;
@@ -26,11 +28,19 @@ describe('UserUnitOfWork (integration)', () => {
 
   beforeAll(async () => {
     pgContainer = await startPostgresContainer();
-    prisma = await setupPrismaForTests(pgContainer.getConnectionUri());
+    db = await setupDrizzleForTests(pgContainer.getConnectionUri());
 
-    eventStoreService = new EventStoreService(prisma as any);
+    const mockCls = { isActive: () => false, get: () => null } as any;
+    const drizzleServiceMock = {
+      db,
+      transaction: <T>(fn: (tx: any) => Promise<T>): Promise<T> =>
+        db.transaction(fn),
+    } as DrizzleService;
+
+    eventStoreService = new EventStoreService(drizzleServiceMock);
     serializer = new UserEventSerializer();
-    readModelRepo = new UserReadModelRepository(prisma as any);
+    const auditService = new AuditableTableService(drizzleServiceMock, mockCls);
+    readModelRepo = new UserReadModelRepository(auditService);
     unitOfWork = new UserUnitOfWork(
       eventStoreService,
       serializer,
@@ -40,12 +50,12 @@ describe('UserUnitOfWork (integration)', () => {
   }, 120_000);
 
   afterAll(async () => {
-    await disconnectPrisma(prisma);
+    await disconnectDrizzle();
     await pgContainer.stop();
   });
 
   beforeEach(async () => {
-    await cleanDatabase(prisma);
+    await cleanDatabase(db);
     mockEventBus.publish.mockClear();
   });
 

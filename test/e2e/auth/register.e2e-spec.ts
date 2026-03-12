@@ -1,26 +1,29 @@
 import type { INestApplication } from '@nestjs/common';
-import type { PrismaClient } from '@prisma/client';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { eq } from 'drizzle-orm';
 import request from 'supertest';
 import type { App } from 'supertest/types';
+import { authCredentialsTable } from '../../../src/shared/infrastructure/database/schema/auth-credentials.table';
+import { usersTable } from '../../../src/shared/infrastructure/database/schema/users.table';
 import {
   cleanDatabase,
-  disconnectPrisma,
-  setupPrismaForTests,
-} from '../../helpers/prisma-test-utils';
+  disconnectDrizzle,
+  setupDrizzleForTests,
+  type TestDrizzleDb,
+} from '../../helpers/drizzle-test-utils';
 import { createTestApp } from '../../helpers/test-app-factory';
 import { startPostgresContainer } from '../../helpers/testcontainers-setup';
 
 describe('POST /auth/register (e2e)', () => {
   let app: INestApplication<App>;
   let pgContainer: StartedPostgreSqlContainer;
-  let prisma: PrismaClient;
+  let db: TestDrizzleDb;
 
   beforeAll(async () => {
     pgContainer = await startPostgresContainer();
 
     const dbUrl = pgContainer.getConnectionUri();
-    prisma = await setupPrismaForTests(dbUrl);
+    db = await setupDrizzleForTests(dbUrl);
 
     app = await createTestApp({
       DATABASE_URL: dbUrl,
@@ -33,12 +36,12 @@ describe('POST /auth/register (e2e)', () => {
 
   afterAll(async () => {
     await app?.close();
-    await disconnectPrisma(prisma);
+    await disconnectDrizzle();
     await pgContainer?.stop();
   });
 
   beforeEach(async () => {
-    await cleanDatabase(prisma);
+    await cleanDatabase(db);
   });
 
   it('201 — registers with valid data', async () => {
@@ -60,9 +63,11 @@ describe('POST /auth/register (e2e)', () => {
       password: 'securePass123',
     });
 
-    const user = await (prisma as any).user.findUnique({
-      where: { id: res.body.user_id },
-    });
+    const results = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.id, res.body.user_id));
+    const user = results[0];
     expect(user).toBeDefined();
     expect(user.email).toBe('dbcheck@example.com');
   });
@@ -74,9 +79,11 @@ describe('POST /auth/register (e2e)', () => {
       password: 'securePass123',
     });
 
-    const cred = await (prisma as any).authCredential.findUnique({
-      where: { userId: res.body.user_id },
-    });
+    const results = await db
+      .select()
+      .from(authCredentialsTable)
+      .where(eq(authCredentialsTable.userId, res.body.user_id));
+    const cred = results[0];
     expect(cred).toBeDefined();
     expect(cred.email).toBe('credcheck@example.com');
     expect(cred.passwordHash).toMatch(/^\$2[ab]\$/);

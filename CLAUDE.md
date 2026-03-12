@@ -24,9 +24,10 @@ bun run test -- --testPathPattern=<pattern>   # Single unit test
 bun run test:integration     # Integration tests (Testcontainers — Docker required)
 bun run test:e2e             # End-to-end tests (Testcontainers — Docker required)
 
-# Database
-bunx prisma generate         # Regenerate Prisma client after schema changes
-bunx prisma db push          # Push schema to local DB (dev only)
+# Database (Drizzle ORM + postgres.js)
+bun run db:generate          # Generate migration SQL from schema changes
+bun run db:migrate           # Apply pending migrations
+bun run db:studio            # Open Drizzle Studio (visual DB browser)
 
 # Infrastructure
 docker compose up -d         # Start PostgreSQL (dev ports exposed via override)
@@ -36,7 +37,7 @@ docker compose up -d         # Start PostgreSQL (dev ports exposed via override)
 
 Clean Architecture + DDD + CQRS + Event Sourcing on NestJS v11 / TypeScript 5.7 (`nodenext` module resolution, CJS output).
 
-**Data stores**: PostgreSQL via Prisma 6 (read model projections and `domain_events` table as the event store / source of truth).
+**Data stores**: PostgreSQL via Drizzle ORM + postgres.js driver (read model projections and `domain_events` table as the event store / source of truth). Schema defined in `src/shared/infrastructure/database/schema/`. Migrations managed by `drizzle-kit` in `drizzle/migrations/`.
 
 ### Bounded Contexts
 
@@ -47,7 +48,7 @@ Two modules under `src/modules/`, communicating via `@nestjs/cqrs` CommandBus (s
 | **User** (`src/modules/user/`) | Identity aggregate, event sourcing, read model | `UserAggregate`, `UserUnitOfWork`, `UserEventStoreRepository` |
 | **Auth** (`src/modules/auth/`) | Credentials, password hashing, JWT tokens | `RegisterHandler`, `LoginHandler`, `BcryptPasswordHasher`, `TokenServiceImpl` |
 
-Shared base classes live in `src/shared/` (AggregateRootBase, DomainEventBase, ValueObject, EventStoreService, PrismaService). EventStoreModule, PrismaModule, and AppLoggerModule are global.
+Shared base classes live in `src/shared/` (AggregateRootBase, DomainEventBase, ValueObject, EventStoreService, DrizzleService, AuditableTableService). EventStoreModule, DrizzleModule, and AppLoggerModule are global.
 
 ### Layer Rules
 
@@ -82,7 +83,9 @@ export const USER_REPOSITORY_TOKEN = Symbol('IUserRepository');
 
 ### Important Design Decisions
 
-- Password hashes are stored in Auth's `auth_credentials` Prisma table, never in domain events (GDPR).
+- Password hashes are stored in Auth's `auth_credentials` table, never in domain events (GDPR).
+- `AuditableTableService` auto-populates `createdBy`/`updatedBy` from CLS context and provides `softDelete()`/`notDeleted()` helpers.
+- Biome's `style/useImportType` rule is disabled because `emitDecoratorMetadata` requires value imports for all constructor-injected classes (NestJS DI metadata).
 - `EventStoreService.appendToStream()` takes `serializer` as a parameter (not injected) to support multiple bounded contexts with different event types.
 - `EventSerializer.deserialize()` returns `null` for unknown event types (forward compatibility).
 - `DomainEventBase` constructor accepts optional `eventId`/`occurredAt` for correct deserialization from stored events.
@@ -90,12 +93,14 @@ export const USER_REPOSITORY_TOKEN = Symbol('IUserRepository');
 - All auth failures return identical 401 responses to prevent user enumeration.
 - Structured logging via `nestjs-pino`. Auth handlers use `@InjectPinoLogger()` for security audit logs. Other services use NestJS built-in `Logger` (auto-delegates to pino). `LOG_LEVEL` env var controls output (default: `debug` in dev, `info` in prod). Sensitive fields (passwords, tokens, authorization headers) are automatically redacted. Request IDs are correlated via CLS (`X-Request-Id` header or auto-generated UUID).
 
-### Prisma Models
+### Database Tables
 
-Three tables in one schema, owned by different contexts:
-- `domain_events` — Append-only event store (source of truth). Shared infrastructure.
-- `users` — User read model (no password). Projected from domain events.
-- `auth_credentials` — Auth context. Password hash, login tracking.
+Three tables defined in `src/shared/infrastructure/database/schema/`, owned by different contexts:
+- `domain_events` — Append-only event store (source of truth). Shared infrastructure. No audit columns.
+- `users` — User read model (no password). Projected from domain events. Has audit + soft-delete columns.
+- `auth_credentials` — Auth context. Password hash, login tracking. Has audit + soft-delete columns.
+
+Schema helpers in `columns.helpers.ts` define reusable audit columns (`createdAt`, `createdBy`, `updatedAt`, `updatedBy`, `deletedAt`, `deletedBy`).
 
 ### Git Hooks (Husky)
 

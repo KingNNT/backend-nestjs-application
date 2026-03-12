@@ -1,20 +1,22 @@
 import type { INestApplication } from '@nestjs/common';
-import type { PrismaClient } from '@prisma/client';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { eq } from 'drizzle-orm';
 import request from 'supertest';
 import type { App } from 'supertest/types';
+import { authCredentialsTable } from '../../../src/shared/infrastructure/database/schema/auth-credentials.table';
 import {
   cleanDatabase,
-  disconnectPrisma,
-  setupPrismaForTests,
-} from '../../helpers/prisma-test-utils';
+  disconnectDrizzle,
+  setupDrizzleForTests,
+  type TestDrizzleDb,
+} from '../../helpers/drizzle-test-utils';
 import { createTestApp } from '../../helpers/test-app-factory';
 import { startPostgresContainer } from '../../helpers/testcontainers-setup';
 
 describe('POST /auth/login (e2e)', () => {
   let app: INestApplication<App>;
   let pgContainer: StartedPostgreSqlContainer;
-  let prisma: PrismaClient;
+  let db: TestDrizzleDb;
 
   const testUser = {
     email: 'logintest@example.com',
@@ -26,7 +28,7 @@ describe('POST /auth/login (e2e)', () => {
     pgContainer = await startPostgresContainer();
 
     const dbUrl = pgContainer.getConnectionUri();
-    prisma = await setupPrismaForTests(dbUrl);
+    db = await setupDrizzleForTests(dbUrl);
 
     app = await createTestApp({
       DATABASE_URL: dbUrl,
@@ -39,12 +41,12 @@ describe('POST /auth/login (e2e)', () => {
 
   afterAll(async () => {
     await app?.close();
-    await disconnectPrisma(prisma);
+    await disconnectDrizzle();
     await pgContainer?.stop();
   });
 
   beforeEach(async () => {
-    await cleanDatabase(prisma);
+    await cleanDatabase(db);
     // Register a test user before each login test
     await request(app.getHttpServer()).post('/auth/register').send(testUser);
   });
@@ -117,9 +119,11 @@ describe('POST /auth/login (e2e)', () => {
     });
 
     // Query credentials to check lastLoginAt
-    const cred = await (prisma as any).authCredential.findFirst({
-      where: { email: testUser.email },
-    });
+    const results = await db
+      .select()
+      .from(authCredentialsTable)
+      .where(eq(authCredentialsTable.email, testUser.email));
+    const cred = results[0];
     expect(cred.lastLoginAt).toBeDefined();
     expect(cred.lastLoginAt).not.toBeNull();
   });

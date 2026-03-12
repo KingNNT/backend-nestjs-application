@@ -29,7 +29,7 @@ export class CreateUserHandler
       username: command.username,
     });
 
-    // Persist events to EventStoreDB + update read model via UoW projection
+    // Persist events to event store + update read model via UoW projection
     await this.unitOfWork.commit(user);
 
     this.logger.log(`User created: userId=${user.aggregateId}`);

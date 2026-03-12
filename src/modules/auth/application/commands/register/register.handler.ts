@@ -1,10 +1,6 @@
 import { ConflictException, Inject } from '@nestjs/common';
-import {
-  type CommandBus,
-  CommandHandler,
-  type ICommandHandler,
-} from '@nestjs/cqrs';
-import { InjectPinoLogger, type PinoLogger } from 'nestjs-pino';
+import { CommandBus, CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { CreateUserCommand } from '../../../../user/application/commands/create-user/create-user.command';
 import type { CreateUserResult } from '../../../../user/application/commands/create-user/create-user.result';
 import {
@@ -46,7 +42,7 @@ export class RegisterHandler
       throw new Error('Password must be at least 8 characters');
     }
 
-    // Pre-check: reject duplicates BEFORE writing to EventStoreDB
+    // Pre-check: reject duplicates BEFORE writing to event store
     const existingByEmail = await this.credentialsRepo.findByEmailOrUsername(
       command.email,
     );

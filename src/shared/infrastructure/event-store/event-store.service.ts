@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { asc, desc, eq } from 'drizzle-orm';
 import type { DomainEventBase } from '../../domain/domain-event.base';
-import type { PrismaService } from '../prisma/prisma.service';
+import { DrizzleService } from '../database/drizzle.service';
+import { domainEventsTable } from '../database/schema/domain-events.table';
 
 export interface StoredEventData {
   eventType: string;
@@ -35,7 +37,7 @@ export class ConcurrencyError extends Error {
 export class EventStoreService {
   private readonly logger = new Logger(EventStoreService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly drizzle: DrizzleService) {}
 
   async appendToStream(
     streamId: string,
@@ -43,15 +45,16 @@ export class EventStoreService {
     expectedRevision: bigint | 'no_stream' | 'any',
     serializer: EventSerializer,
   ): Promise<AppendResult> {
-    return this.prisma.$transaction(async (tx) => {
+    return this.drizzle.transaction(async (tx) => {
       // Get the current max version for this stream
-      const latest = await tx.domainEvent.findFirst({
-        where: { streamId },
-        orderBy: { version: 'desc' },
-        select: { version: true },
-      });
+      const latest = await tx
+        .select({ version: domainEventsTable.version })
+        .from(domainEventsTable)
+        .where(eq(domainEventsTable.streamId, streamId))
+        .orderBy(desc(domainEventsTable.version))
+        .limit(1);
 
-      const currentRevision = latest?.version ?? null;
+      const currentRevision = latest[0]?.version ?? null;
 
       // Validate expected revision
       if (expectedRevision === 'no_stream') {
@@ -80,13 +83,29 @@ export class EventStoreService {
           id: stored.eventId,
           streamId,
           eventType: stored.eventType,
-          payload: stored.payload as object,
+          payload: stored.payload,
           version: startVersion + BigInt(index),
           occurredAt: new Date(stored.occurredAt),
         };
       });
 
-      await tx.domainEvent.createMany({ data: rows });
+      try {
+        await tx.insert(domainEventsTable).values(rows);
+      } catch (err: unknown) {
+        if (
+          typeof err === 'object' &&
+          err !== null &&
+          'code' in err &&
+          (err as { code: string }).code === '23505'
+        ) {
+          throw new ConcurrencyError(
+            streamId,
+            expectedRevision,
+            currentRevision,
+          );
+        }
+        throw err;
+      }
 
       const nextExpectedRevision = startVersion + BigInt(events.length) - 1n;
       return { nextExpectedRevision };
@@ -97,10 +116,11 @@ export class EventStoreService {
     streamId: string,
     serializer: EventSerializer,
   ): Promise<DomainEventBase[]> {
-    const rows = await this.prisma.domainEvent.findMany({
-      where: { streamId },
-      orderBy: { version: 'asc' },
-    });
+    const rows = await this.drizzle.db
+      .select()
+      .from(domainEventsTable)
+      .where(eq(domainEventsTable.streamId, streamId))
+      .orderBy(asc(domainEventsTable.version));
 
     const events: DomainEventBase[] = [];
     for (const row of rows) {

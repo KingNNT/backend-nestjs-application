@@ -1,34 +1,45 @@
 import { randomUUID } from 'node:crypto';
-import type { PrismaClient } from '@prisma/client';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { eq } from 'drizzle-orm';
 import { UserCreatedEvent } from '../../../src/modules/user/domain/events/user-created.event';
 import { UserReadModelRepository } from '../../../src/modules/user/infrastructure/persistence/read-model/user-read-model.repository';
+import { AuditableTableService } from '../../../src/shared/infrastructure/database/auditable-table.service';
+import type { DrizzleService } from '../../../src/shared/infrastructure/database/drizzle.service';
+import { usersTable } from '../../../src/shared/infrastructure/database/schema/users.table';
 import {
   cleanDatabase,
-  disconnectPrisma,
-  setupPrismaForTests,
-} from '../../helpers/prisma-test-utils';
+  disconnectDrizzle,
+  setupDrizzleForTests,
+  type TestDrizzleDb,
+} from '../../helpers/drizzle-test-utils';
 import { startPostgresContainer } from '../../helpers/testcontainers-setup';
 
 describe('UserReadModelRepository (integration)', () => {
   let container: StartedPostgreSqlContainer;
-  let prisma: PrismaClient;
+  let db: TestDrizzleDb;
   let repository: UserReadModelRepository;
 
   beforeAll(async () => {
     container = await startPostgresContainer();
-    prisma = await setupPrismaForTests(container.getConnectionUri());
-    // UserReadModelRepository expects a PrismaService (which extends PrismaClient)
-    repository = new UserReadModelRepository(prisma as any);
+    db = await setupDrizzleForTests(container.getConnectionUri());
+
+    const mockCls = { isActive: () => false, get: () => null } as any;
+    const drizzleServiceMock = {
+      db,
+      transaction: <T>(fn: (tx: any) => Promise<T>): Promise<T> =>
+        db.transaction(fn),
+    } as DrizzleService;
+    const auditService = new AuditableTableService(drizzleServiceMock, mockCls);
+    repository = new UserReadModelRepository(auditService);
   }, 60_000);
 
   afterAll(async () => {
-    await disconnectPrisma(prisma);
+    await disconnectDrizzle();
     await container.stop();
   });
 
   beforeEach(async () => {
-    await cleanDatabase(prisma);
+    await cleanDatabase(db);
   });
 
   it('applyProjection() inserts a row into users table for UserCreatedEvent', async () => {
@@ -43,9 +54,11 @@ describe('UserReadModelRepository (integration)', () => {
 
     await repository.applyProjection([event]);
 
-    const user = await (prisma as any).user.findUnique({
-      where: { id: userId },
-    });
+    const results = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.id, userId));
+    const user = results[0];
     expect(user).toBeDefined();
     expect(user.email).toBe('test@example.com');
     expect(user.username).toBe('testuser');

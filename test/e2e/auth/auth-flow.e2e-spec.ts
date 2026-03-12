@@ -1,26 +1,26 @@
 import type { INestApplication } from '@nestjs/common';
-import type { PrismaClient } from '@prisma/client';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import {
   cleanDatabase,
-  disconnectPrisma,
-  setupPrismaForTests,
-} from '../../helpers/prisma-test-utils';
+  disconnectDrizzle,
+  setupDrizzleForTests,
+  type TestDrizzleDb,
+} from '../../helpers/drizzle-test-utils';
 import { createTestApp } from '../../helpers/test-app-factory';
 import { startPostgresContainer } from '../../helpers/testcontainers-setup';
 
 describe('Auth flow (e2e)', () => {
   let app: INestApplication<App>;
   let pgContainer: StartedPostgreSqlContainer;
-  let prisma: PrismaClient;
+  let db: TestDrizzleDb;
 
   beforeAll(async () => {
     pgContainer = await startPostgresContainer();
 
     const dbUrl = pgContainer.getConnectionUri();
-    prisma = await setupPrismaForTests(dbUrl);
+    db = await setupDrizzleForTests(dbUrl);
 
     app = await createTestApp({
       DATABASE_URL: dbUrl,
@@ -33,12 +33,12 @@ describe('Auth flow (e2e)', () => {
 
   afterAll(async () => {
     await app?.close();
-    await disconnectPrisma(prisma);
+    await disconnectDrizzle();
     await pgContainer?.stop();
   });
 
   beforeEach(async () => {
-    await cleanDatabase(prisma);
+    await cleanDatabase(db);
   });
 
   it('register then login with email', async () => {

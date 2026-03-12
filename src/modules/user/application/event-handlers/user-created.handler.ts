@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { type EventBus, EventsHandler, type IEventHandler } from '@nestjs/cqrs';
+import { EventBus, EventsHandler, type IEventHandler } from '@nestjs/cqrs';
 import { UserRegisteredIntegrationEvent } from '../../../../shared/events/integration/user-registered.integration-event';
 import { UserCreatedEvent } from '../../domain/events/user-created.event';
 

@@ -1,41 +1,48 @@
 import { randomUUID } from 'node:crypto';
-import type { PrismaClient } from '@prisma/client';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { UserAggregate } from '../../../src/modules/user/domain/aggregates/user.aggregate';
 import { UserId } from '../../../src/modules/user/domain/value-objects/user-id.vo';
 import { UserEventSerializer } from '../../../src/modules/user/infrastructure/persistence/event-store/event-serializer';
 import { UserEventStoreRepository } from '../../../src/modules/user/infrastructure/persistence/event-store/user-event-store.repository';
+import type { DrizzleService } from '../../../src/shared/infrastructure/database/drizzle.service';
 import { EventStoreService } from '../../../src/shared/infrastructure/event-store/event-store.service';
 import {
   cleanDatabase,
-  disconnectPrisma,
-  setupPrismaForTests,
-} from '../../helpers/prisma-test-utils';
+  disconnectDrizzle,
+  setupDrizzleForTests,
+  type TestDrizzleDb,
+} from '../../helpers/drizzle-test-utils';
 import { startPostgresContainer } from '../../helpers/testcontainers-setup';
 
 describe('UserEventStoreRepository (integration)', () => {
   let pgContainer: StartedPostgreSqlContainer;
-  let prisma: PrismaClient;
+  let db: TestDrizzleDb;
   let eventStoreService: EventStoreService;
   let serializer: UserEventSerializer;
   let repository: UserEventStoreRepository;
 
   beforeAll(async () => {
     pgContainer = await startPostgresContainer();
-    prisma = await setupPrismaForTests(pgContainer.getConnectionUri());
+    db = await setupDrizzleForTests(pgContainer.getConnectionUri());
 
-    eventStoreService = new EventStoreService(prisma as any);
+    const drizzleServiceMock = {
+      db,
+      transaction: <T>(fn: (tx: any) => Promise<T>): Promise<T> =>
+        db.transaction(fn),
+    } as DrizzleService;
+
+    eventStoreService = new EventStoreService(drizzleServiceMock);
     serializer = new UserEventSerializer();
     repository = new UserEventStoreRepository(eventStoreService, serializer);
   }, 60_000);
 
   afterAll(async () => {
-    await disconnectPrisma(prisma);
+    await disconnectDrizzle();
     await pgContainer.stop();
   });
 
   beforeEach(async () => {
-    await cleanDatabase(prisma);
+    await cleanDatabase(db);
   });
 
   it('findById() returns null for non-existent stream', async () => {

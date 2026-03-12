@@ -5,9 +5,13 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
-import { PrismaClient } from '@prisma/client';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
 import { AppModule } from '../../src/app.module';
-import { PrismaService } from '../../src/shared/infrastructure/prisma/prisma.service';
+import { DrizzleService } from '../../src/shared/infrastructure/database/drizzle.service';
+import * as schema from '../../src/shared/infrastructure/database/schema/index';
+
+let testSql: postgres.Sql | null = null;
 
 export async function createTestApp(
   envOverrides: Record<string, string>,
@@ -15,21 +19,29 @@ export async function createTestApp(
   // Silence pino logs in tests unless explicitly configured
   process.env.LOG_LEVEL = process.env.LOG_LEVEL ?? 'silent';
 
-  // Set env vars so ConfigService and PrismaClient pick them up
+  // Set env vars so ConfigService picks them up
   for (const [key, value] of Object.entries(envOverrides)) {
     process.env[key] = value;
   }
 
-  // Create a PrismaClient pointing to the test DB
-  const testPrisma = new PrismaClient({
-    datasources: { db: { url: envOverrides.DATABASE_URL } },
-  });
+  // Create a Drizzle instance pointing to the test DB
+  testSql = postgres(envOverrides.DATABASE_URL);
+  const testDb = drizzle(testSql, { schema });
 
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
   })
-    .overrideProvider(PrismaService)
-    .useValue(testPrisma)
+    .overrideProvider(DrizzleService)
+    .useValue({
+      db: testDb,
+      transaction: <T>(fn: (tx: any) => Promise<T>): Promise<T> =>
+        testDb.transaction(fn),
+      onModuleInit: () => {},
+      onModuleDestroy: async () => {
+        await testSql?.end();
+        testSql = null;
+      },
+    })
     .compile();
 
   const app = moduleRef.createNestApplication();
@@ -46,4 +58,11 @@ export async function createTestApp(
 
   await app.init();
   return app;
+}
+
+export async function closeTestConnection(): Promise<void> {
+  if (testSql) {
+    await testSql.end();
+    testSql = null;
+  }
 }

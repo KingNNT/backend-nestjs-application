@@ -1,6 +1,6 @@
 import { Inject, UnauthorizedException } from '@nestjs/common';
 import { CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
-import { InjectPinoLogger, type PinoLogger } from 'nestjs-pino';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import {
   AUTH_CREDENTIALS_REPOSITORY_TOKEN,
   type IAuthCredentialsRepository,

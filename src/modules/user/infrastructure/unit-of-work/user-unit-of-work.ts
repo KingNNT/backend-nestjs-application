@@ -1,13 +1,13 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { EventBus } from '@nestjs/cqrs';
+import { EventBus } from '@nestjs/cqrs';
 import type { IUnitOfWork } from '../../../../shared/application/unit-of-work.interface';
 import type { AggregateRootBase } from '../../../../shared/domain/aggregate-root.base';
-import type { EventStoreService } from '../../../../shared/infrastructure/event-store/event-store.service';
+import { EventStoreService } from '../../../../shared/infrastructure/event-store/event-store.service';
 import {
   type IUserReadModelRepository,
   USER_READ_MODEL_REPOSITORY_TOKEN,
 } from '../../application/ports/user-read-model.repository.interface';
-import type { UserEventSerializer } from '../persistence/event-store/event-serializer';
+import { UserEventSerializer } from '../persistence/event-store/event-serializer';
 
 @Injectable()
 export class UserUnitOfWork implements IUnitOfWork {
@@ -33,7 +33,7 @@ export class UserUnitOfWork implements IUnitOfWork {
         ? ('no_stream' as const)
         : BigInt(aggregate.version);
 
-    // Step 1: Write to EventStoreDB (source of truth)
+    // Step 1: Append to event store (source of truth)
     const appendResult = await this.eventStore.appendToStream(
       streamId,
       uncommittedEvents,
@@ -44,7 +44,7 @@ export class UserUnitOfWork implements IUnitOfWork {
       `Appended ${uncommittedEvents.length} event(s) to ${streamId}`,
     );
 
-    // Step 2: Update aggregate version to match EventStoreDB
+    // Step 2: Update aggregate version to match event store
     aggregate.version = Number(appendResult.nextExpectedRevision);
 
     // Step 3: Update read model projection (best-effort)
@@ -53,7 +53,7 @@ export class UserUnitOfWork implements IUnitOfWork {
       this.logger.debug('Read model projection updated');
     } catch (err) {
       this.logger.error(
-        'Read model projection failed — events are in EventStoreDB, ' +
+        'Read model projection failed — events are in the domain_events table, ' +
           'projection will need to be rebuilt',
         err instanceof Error ? err.message : String(err),
       );

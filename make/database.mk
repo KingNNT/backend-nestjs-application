@@ -2,23 +2,21 @@
 # Database commands
 # ============================================================================
 
-# ── Prisma ─────────────────────────────────────────────────────────────────
+# ── Drizzle ──────────────────────────────────────────────────────────────
 
-.PHONY: db-generate db-push db-reset db-studio
+.PHONY: db-generate db-migrate db-push db-studio
 
-db-generate: ## Regenerate Prisma client
-	bunx prisma generate
+db-generate: ## Generate migration SQL from schema changes
+	bunx drizzle-kit generate
 
-db-push: ## Push schema to dev DB
-	bunx prisma db push
+db-migrate: ## Apply migrations to DB
+	bunx drizzle-kit migrate
 
-db-reset: ## Reset dev DB (WARNING: destroys data)
-	@echo "WARNING: This will destroy all data in the dev database!"
-	@read -p "Are you sure? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
-	bunx prisma db push --force-reset
+db-push: ## Push schema to dev DB (no migration files)
+	bunx drizzle-kit push
 
-db-studio: ## Open Prisma Studio
-	bunx prisma studio
+db-studio: ## Open Drizzle Studio
+	bunx drizzle-kit studio
 
 # ── Database shells ────────────────────────────────────────────────────────
 

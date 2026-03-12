@@ -1,13 +1,13 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
-import type { CommandBus } from '@nestjs/cqrs';
+import { CommandBus } from '@nestjs/cqrs';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { LoginCommand } from '../../application/commands/login/login.command';
 import type { LoginResult } from '../../application/commands/login/login.result';
 import { RegisterCommand } from '../../application/commands/register/register.command';
 import type { RegisterResult } from '../../application/commands/register/register.result';
-import type { LoginRequestDto } from '../dtos/login.request.dto';
+import { LoginRequestDto } from '../dtos/login.request.dto';
 import { LoginResponseDto } from '../dtos/login.response.dto';
-import type { RegisterRequestDto } from '../dtos/register.request.dto';
+import { RegisterRequestDto } from '../dtos/register.request.dto';
 import { RegisterResponseDto } from '../dtos/register.response.dto';
 
 @ApiTags('auth')
