@@ -1,14 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { DomainEventBase } from '../../../../../shared/domain/domain-event.base';
+import { EventRegistry } from '../../../../../shared/infrastructure/event-store/event-registry';
 import type {
   EventSerializer as IEventSerializer,
   StoredEventData,
 } from '../../../../../shared/infrastructure/event-store/event-store.service';
-import { UserCreatedEvent } from '../../../domain/events/user-created.event';
 
 @Injectable()
 export class UserEventSerializer implements IEventSerializer {
   private readonly logger = new Logger(UserEventSerializer.name);
+
+  constructor(private readonly registry: EventRegistry) {}
 
   serialize(event: DomainEventBase): StoredEventData {
     return {
@@ -20,26 +22,12 @@ export class UserEventSerializer implements IEventSerializer {
   }
 
   deserialize(data: StoredEventData): DomainEventBase | null {
-    const options = {
-      eventId: data.eventId,
-      occurredAt: new Date(data.occurredAt),
-    };
-
-    switch (data.eventType) {
-      case 'UserCreated':
-        return new UserCreatedEvent(
-          {
-            userId: data.payload['userId'] as string,
-            email: data.payload['email'] as string,
-            username: data.payload['username'] as string,
-            createdAt: new Date(data.payload['createdAt'] as string),
-          },
-          options,
-        );
-      default:
-        this.logger.warn(`Unknown event type "${data.eventType}" — skipping`);
-        return null;
+    const deserializer = this.registry.getDeserializer(data.eventType);
+    if (!deserializer) {
+      this.logger.warn(`Unknown event type "${data.eventType}" — skipping`);
+      return null;
     }
+    return deserializer(data);
   }
 
   private extractPayload(event: DomainEventBase): Record<string, unknown> {

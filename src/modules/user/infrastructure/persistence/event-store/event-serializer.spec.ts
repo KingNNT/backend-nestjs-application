@@ -1,12 +1,28 @@
 import { DomainEventBase } from '../../../../../shared/domain/domain-event.base';
+import { EventRegistry } from '../../../../../shared/infrastructure/event-store/event-registry';
 import { UserCreatedEvent } from '../../../domain/events/user-created.event';
 import { UserEventSerializer } from './event-serializer';
 
 describe('UserEventSerializer', () => {
   let serializer: UserEventSerializer;
+  let registry: EventRegistry;
 
   beforeEach(() => {
-    serializer = new UserEventSerializer();
+    registry = new EventRegistry();
+    registry.register(
+      'UserCreated',
+      (data) =>
+        new UserCreatedEvent(
+          {
+            userId: data.payload['userId'] as string,
+            email: data.payload['email'] as string,
+            username: data.payload['username'] as string,
+            createdAt: new Date(data.payload['createdAt'] as string),
+          },
+          { eventId: data.eventId, occurredAt: new Date(data.occurredAt) },
+        ),
+    );
+    serializer = new UserEventSerializer(registry);
   });
 
   describe('serialize()', () => {

@@ -5,6 +5,7 @@ import { ClsService } from 'nestjs-cls';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { ClsUserInterceptor } from './shared/infrastructure/cls/cls-user.interceptor';
+import { DomainExceptionFilter } from './shared/presentation/filters/domain-exception.filter';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -24,6 +25,8 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
+  app.useGlobalFilters(new DomainExceptionFilter());
+
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Inviduality API')
     .setDescription('Event-sourced NestJS API with DDD + CQRS')
@@ -34,7 +37,7 @@ async function bootstrap(): Promise<void> {
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, document);
 
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 8000);
 }
 
 bootstrap();

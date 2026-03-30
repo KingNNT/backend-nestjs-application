@@ -1,0 +1,40 @@
+erDiagram
+    users {
+        uuid id PK
+        varchar email UK "NOT NULL, max 255"
+        varchar username UK "NOT NULL, max 30"
+        boolean is_active "NOT NULL, default true"
+        timestamp created_at "NOT NULL, default now()"
+        uuid created_by
+        timestamp updated_at "NOT NULL, default now()"
+        uuid updated_by
+        timestamp deleted_at "soft delete"
+        uuid deleted_by
+    }
+
+    auth_credentials {
+        uuid user_id PK
+        varchar email UK "NOT NULL, max 255"
+        varchar username UK "NOT NULL, max 30"
+        varchar password_hash "NOT NULL, max 255"
+        boolean is_active "NOT NULL, default true"
+        timestamp last_login_at
+        timestamp created_at "NOT NULL, default now()"
+        uuid created_by
+        timestamp updated_at "NOT NULL, default now()"
+        uuid updated_by
+        timestamp deleted_at "soft delete"
+        uuid deleted_by
+    }
+
+    domain_events {
+        uuid id PK
+        varchar stream_id "NOT NULL, max 255"
+        varchar event_type "NOT NULL, max 100"
+        jsonb payload "NOT NULL"
+        bigint version "NOT NULL"
+        timestamp occurred_at "NOT NULL"
+    }
+
+    users ||--|| auth_credentials : "user_id = id"
+    users ||--o{ domain_events : "id = stream_id"

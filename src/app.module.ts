@@ -6,6 +6,7 @@ import { AppClsModule } from './shared/infrastructure/cls/cls.module';
 import { DrizzleModule } from './shared/infrastructure/database/drizzle.module';
 import { EventStoreModule } from './shared/infrastructure/event-store/event-store.module';
 import { AppLoggerModule } from './shared/infrastructure/logger/logger.module';
+import { HealthModule } from './shared/presentation/health/health.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { AppLoggerModule } from './shared/infrastructure/logger/logger.module';
     EventStoreModule,
     UserModule,
     AuthModule,
+    HealthModule,
   ],
 })
 export class AppModule {}

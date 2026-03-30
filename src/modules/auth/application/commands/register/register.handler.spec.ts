@@ -3,6 +3,7 @@ import { createMockAuthCredentialsRepository } from '../../../../../../test/help
 import { createMockCommandBus } from '../../../../../../test/helpers/mocks/command-bus.mock';
 import { createMockPinoLogger } from '../../../../../../test/helpers/mocks/logger.mock';
 import { createMockPasswordHasher } from '../../../../../../test/helpers/mocks/password-hasher.mock';
+import { DomainValidationError } from '../../../../../shared/domain/errors/domain-validation.error';
 import { CreateUserCommand } from '../../../../user/application/commands/create-user/create-user.command';
 import type { IAuthCredentialsRepository } from '../../ports/auth-credentials.repository.interface';
 import type { IPasswordHasher } from '../../ports/password-hasher.interface';
@@ -98,7 +99,7 @@ describe('RegisterHandler', () => {
     );
 
     await expect(handler.execute(command)).rejects.toThrow(
-      'Password must be at least 8 characters',
+      DomainValidationError,
     );
     expect(mockHasher.hash).not.toHaveBeenCalled();
   });
@@ -107,7 +108,7 @@ describe('RegisterHandler', () => {
     const command = new RegisterCommand('test@example.com', 'testuser', '');
 
     await expect(handler.execute(command)).rejects.toThrow(
-      'Password must be at least 8 characters',
+      DomainValidationError,
     );
   });
 
@@ -152,5 +153,17 @@ describe('RegisterHandler', () => {
     await expect(handler.execute(command)).rejects.toThrow(ConflictException);
     expect(mockCommandBus.execute).not.toHaveBeenCalled();
     expect(mockCredentials.create).not.toHaveBeenCalled();
+  });
+
+  it('logs error and rethrows if credential insert fails after user creation', async () => {
+    mockCredentials.create.mockRejectedValue(new Error('DB constraint'));
+
+    const command = new RegisterCommand(
+      'test@example.com',
+      'testuser',
+      'securePassword123',
+    );
+
+    await expect(handler.execute(command)).rejects.toThrow('DB constraint');
   });
 });

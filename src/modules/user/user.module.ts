@@ -1,10 +1,12 @@
-import { Module } from '@nestjs/common';
+import { Module, type OnModuleInit } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 import { UNIT_OF_WORK_TOKEN } from '../../shared/application/unit-of-work.interface';
+import { EventRegistry } from '../../shared/infrastructure/event-store/event-registry';
 // Application handlers
 import { CreateUserHandler } from './application/commands/create-user/create-user.handler';
 import { UserCreatedDomainHandler } from './application/event-handlers/user-created.handler';
 import { USER_READ_MODEL_REPOSITORY_TOKEN } from './application/ports/user-read-model.repository.interface';
+import { UserCreatedEvent } from './domain/events/user-created.event';
 // Domain tokens
 import { USER_REPOSITORY_TOKEN } from './domain/repositories/user.repository.interface';
 
@@ -45,4 +47,22 @@ const EventHandlers = [UserCreatedDomainHandler];
     ...EventHandlers,
   ],
 })
-export class UserModule {}
+export class UserModule implements OnModuleInit {
+  constructor(private readonly eventRegistry: EventRegistry) {}
+
+  onModuleInit(): void {
+    this.eventRegistry.register(
+      'UserCreated',
+      (data) =>
+        new UserCreatedEvent(
+          {
+            userId: data.payload['userId'] as string,
+            email: data.payload['email'] as string,
+            username: data.payload['username'] as string,
+            createdAt: new Date(data.payload['createdAt'] as string),
+          },
+          { eventId: data.eventId, occurredAt: new Date(data.occurredAt) },
+        ),
+    );
+  }
+}

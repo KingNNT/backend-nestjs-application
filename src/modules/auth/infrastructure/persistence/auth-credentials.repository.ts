@@ -66,4 +66,10 @@ export class AuthCredentialsRepository implements IAuthCredentialsRepository {
       { lastLoginAt: at },
     );
   }
+
+  async deleteByUserId(userId: string): Promise<void> {
+    await this.drizzle.db
+      .delete(authCredentialsTable)
+      .where(eq(authCredentialsTable.userId, userId));
+  }
 }

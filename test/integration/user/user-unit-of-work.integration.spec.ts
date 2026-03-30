@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { UserAggregate } from '../../../src/modules/user/domain/aggregates/user.aggregate';
+import { UserCreatedEvent } from '../../../src/modules/user/domain/events/user-created.event';
 import { UserEventSerializer } from '../../../src/modules/user/infrastructure/persistence/event-store/event-serializer';
 import { UserReadModelRepository } from '../../../src/modules/user/infrastructure/persistence/read-model/user-read-model.repository';
 import { UserUnitOfWork } from '../../../src/modules/user/infrastructure/unit-of-work/user-unit-of-work';
 import { AuditableTableService } from '../../../src/shared/infrastructure/database/auditable-table.service';
 import type { DrizzleService } from '../../../src/shared/infrastructure/database/drizzle.service';
+import { EventRegistry } from '../../../src/shared/infrastructure/event-store/event-registry';
 import { EventStoreService } from '../../../src/shared/infrastructure/event-store/event-store.service';
 import {
   cleanDatabase,
@@ -38,7 +40,21 @@ describe('UserUnitOfWork (integration)', () => {
     } as DrizzleService;
 
     eventStoreService = new EventStoreService(drizzleServiceMock);
-    serializer = new UserEventSerializer();
+    const registry = new EventRegistry();
+    registry.register(
+      'UserCreated',
+      (data) =>
+        new UserCreatedEvent(
+          {
+            userId: data.payload['userId'] as string,
+            email: data.payload['email'] as string,
+            username: data.payload['username'] as string,
+            createdAt: new Date(data.payload['createdAt'] as string),
+          },
+          { eventId: data.eventId, occurredAt: new Date(data.occurredAt) },
+        ),
+    );
+    serializer = new UserEventSerializer(registry);
     const auditService = new AuditableTableService(drizzleServiceMock, mockCls);
     readModelRepo = new UserReadModelRepository(auditService);
     unitOfWork = new UserUnitOfWork(

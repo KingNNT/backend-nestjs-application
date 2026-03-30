@@ -21,4 +21,5 @@ export interface IAuthCredentialsRepository {
     passwordHash: string,
   ): Promise<void>;
   updateLastLogin(userId: string, at: Date): Promise<void>;
+  deleteByUserId(userId: string): Promise<void>;
 }

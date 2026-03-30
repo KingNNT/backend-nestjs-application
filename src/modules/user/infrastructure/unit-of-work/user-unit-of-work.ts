@@ -53,9 +53,12 @@ export class UserUnitOfWork implements IUnitOfWork {
       this.logger.debug('Read model projection updated');
     } catch (err) {
       this.logger.error(
-        'Read model projection failed — events are in the domain_events table, ' +
-          'projection will need to be rebuilt',
-        err instanceof Error ? err.message : String(err),
+        {
+          streamId,
+          eventCount: uncommittedEvents.length,
+          error: err instanceof Error ? err.message : String(err),
+        },
+        'Read model projection failed — events are in the domain_events table, projection will need to be rebuilt',
       );
     }
 

@@ -1,6 +1,7 @@
 import { ConflictException, Inject } from '@nestjs/common';
 import { CommandBus, CommandHandler, type ICommandHandler } from '@nestjs/cqrs';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { DomainValidationError } from '../../../../../shared/domain/errors/domain-validation.error';
 import { CreateUserCommand } from '../../../../user/application/commands/create-user/create-user.command';
 import type { CreateUserResult } from '../../../../user/application/commands/create-user/create-user.result';
 import {
@@ -39,7 +40,7 @@ export class RegisterHandler
         { email: command.email },
         'Registration failed: password validation',
       );
-      throw new Error('Password must be at least 8 characters');
+      throw new DomainValidationError('Password must be at least 8 characters');
     }
 
     // Pre-check: reject duplicates BEFORE writing to event store
@@ -74,12 +75,22 @@ export class RegisterHandler
     >(new CreateUserCommand(command.email, command.username));
 
     // Store credentials in Auth's own table
-    await this.credentialsRepo.create(
-      result.userId,
-      command.email,
-      command.username,
-      passwordHash,
-    );
+    // If this fails, we have an event-sourced user with no credentials.
+    // Log the inconsistency so it can be investigated and reconciled.
+    try {
+      await this.credentialsRepo.create(
+        result.userId,
+        command.email,
+        command.username,
+        passwordHash,
+      );
+    } catch (err) {
+      this.logger.error(
+        { userId: result.userId, email: command.email },
+        'Failed to create auth credentials after user creation — inconsistent state',
+      );
+      throw err;
+    }
 
     this.logger.info({ userId: result.userId }, 'Registration successful');
 
