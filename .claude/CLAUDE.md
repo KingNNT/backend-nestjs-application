@@ -31,6 +31,7 @@ bun run db:studio            # Open Drizzle Studio (visual DB browser)
 
 # Infrastructure
 docker compose up -d         # Start PostgreSQL (dev ports exposed via override)
+make help                    # Show all available Makefile targets (Docker, quality, testing, DB)
 ```
 
 ## Architecture
@@ -48,7 +49,7 @@ Two modules under `src/modules/`, communicating via `@nestjs/cqrs` CommandBus (s
 | **User** (`src/modules/user/`) | Identity aggregate, event sourcing, read model | `UserAggregate`, `UserUnitOfWork`, `UserEventStoreRepository` |
 | **Auth** (`src/modules/auth/`) | Credentials, password hashing, JWT tokens | `RegisterHandler`, `LoginHandler`, `BcryptPasswordHasher`, `TokenServiceImpl` |
 
-Shared base classes live in `src/shared/` (AggregateRootBase, DomainEventBase, ValueObject, EventStoreService, DrizzleService, AuditableTableService). EventStoreModule, DrizzleModule, and AppLoggerModule are global.
+Shared base classes live in `src/shared/` (AggregateRootBase, DomainEventBase, ValueObject, EventStoreService, DrizzleService, AuditableTableService). EventStoreModule, DrizzleModule, AppLoggerModule, and ClsModule are global.
 
 ### Layer Rules
 
@@ -92,6 +93,9 @@ export const USER_REPOSITORY_TOKEN = Symbol('IUserRepository');
 - `ValueObject<T>` generic has no constraint on `T`.
 - All auth failures return identical 401 responses to prevent user enumeration.
 - Structured logging via `nestjs-pino`. Auth handlers use `@InjectPinoLogger()` for security audit logs. Other services use NestJS built-in `Logger` (auto-delegates to pino). `LOG_LEVEL` env var controls output (default: `debug` in dev, `info` in prod). Sensitive fields (passwords, tokens, authorization headers) are automatically redacted. Request IDs are correlated via CLS (`X-Request-Id` header or auto-generated UUID).
+- `DomainValidationError` is a shared domain error (`src/shared/domain/errors/`). `DomainExceptionFilter` catches it globally and returns 400 Bad Request with the error message.
+- `EventRegistry` (`src/shared/infrastructure/event-store/`) provides a centralized registry for event type → deserializer mappings, replacing per-context switch-case deserialization.
+- Health check endpoint (`GET /health`) via `@nestjs/terminus` in `HealthModule` (`src/shared/presentation/health/`).
 
 ### Database Tables
 
